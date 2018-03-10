@@ -3,9 +3,10 @@
  * 10 MAR 2018, Zach Richardson and Daniel Wilson
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 
-void fillMatrix(FILE* input, double[][] mtx);
+void fillMatrix(FILE* input, double mtx[1024][1024]);
 
 /* TO DO:
  * code jacobi
@@ -15,8 +16,8 @@ void fillMatrix(FILE* input, double[][] mtx);
 int main(int argc, const char* argv[]) {
   char* fileName = "jacobi";
   FILE* input = fopen(fileName, "r");
-  double[1024][1024] mtx1;
-  double[1024][1024] mtx2;
+  double mtx1[1024][1024];
+  double mtx2[1024][1024];
   double maxChange = 0;
   double epsilon = 0.00001;
 
@@ -49,7 +50,7 @@ int main(int argc, const char* argv[]) {
   }
 }
 
-void fillMatrix(FILE* input, double[][] mtx){
+void fillMatrix(FILE* input, double mtx[1024][1024]){
   int i = 0;
   int row = 0;
   int col = 0;
@@ -69,7 +70,7 @@ void fillMatrix(FILE* input, double[][] mtx){
     for(col = 0; col < 1023; col++){
       mtx[col][row]= 0.0000000000;
     }
-    mrx[1023][row] = line[1023];
+    mtx[1023][row] = line[1023];
     linelen = getline(&line, &bufsize, input);
   }
 
