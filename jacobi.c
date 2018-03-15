@@ -6,8 +6,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <>
-#define EPSILON 0.00001
+#include <ctype.h>
+#include <math.h>
+#define EPSILON .001
+
+/*
+ */
+double ithCharToDouble(char* line, int i, int* x);
 
 /*
  */
@@ -36,17 +41,20 @@ int main(int argc, const char* argv[]) {
   char* fileName = "input.mtx";
   FILE* input = fopen(fileName, "r");
   double *mtx1 = (double *) malloc(1024*1024*sizeof(double));
-  double *mtx2;
-  double maxChange = 0;
-  int threadNum = 1;
-  int NumOfThreads = *argv[0];
+  double *mtx2 = (double *) malloc(1024*1024*sizeof(double));
+  double maxChange = 1;
+  //int threadNum = 1;
+  //int NumOfThreads = *argv[0];
+  int NumOfThreads = 1;
+  int x;
 
   fillMatrix(input, mtx1);
   memcpy(mtx2, mtx1, 1024*1024*sizeof(double));
-  for(;threadNum < NumOfThreads; threadNum++) {
+  for(int threadNum = 1;threadNum <= NumOfThreads; threadNum++) {
     //new thread of matrixChanger
     matrixChanger(mtx1, mtx2, threadNum, NumOfThreads, &maxChange);
   }
+  x = 1;
 }
 
 /*
@@ -64,13 +72,14 @@ void changeChecker(double* maxChange, double CHALLENGER) {
 void matrixChanger(double* mtx1, double* mtx2, int threadNum, int NumOfThreads, double* maxChange) {
 
   while(*maxChange > EPSILON) {
+    *maxChange = 0;
     for(int row = threadNum; row < 1023; row+=NumOfThreads) {
       for(int col = 1; col < 1023; col++) {
         mtx2[(row*1024)+col] = mtx1[((row-1)*1024)+col] + mtx1[(row*1024)+(col-1)] +
                          mtx1[(row*1024)+(col+1)] + mtx1[((row+1)*1024)+col];
         mtx2[(row*1024)+col] = mtx2[(row*1024)+(col)]/4;
-        if(mtx2[(row*1024)+col] > *maxChange) {
-          changeChecker(maxChange, mtx2[(row*1024)+col]);
+        if((mtx2[(row*1024)+col]- mtx1[(row*1024)+col]) > *maxChange) {
+          changeChecker(maxChange, (mtx2[(row*1024)+col]- mtx1[(row*1024)+col]));
         }
       }
     }
@@ -82,8 +91,8 @@ void matrixChanger(double* mtx1, double* mtx2, int threadNum, int NumOfThreads, 
           mtx1[(row*1024)+col] = mtx2[((row-1)*1024)+col] + mtx2[(row*1024)+(col-1)] +
                            mtx2[(row*1024)+col+1] + mtx2[((row+1)*1024)+col];
           mtx1[(row*1024)+col] = mtx1[(row*1024)+col]/4;
-          if(mtx2[(row*1024)+col] > *maxChange) {
-            changeChecker(maxChange, mtx2[(row*1024)+col]);
+          if((mtx1[(row*1024)+col]- mtx2[(row*1024)+col]) > *maxChange) {
+            changeChecker(maxChange, (mtx1[(row*1024)+col]- mtx2[(row*1024)+col]));
           }
         }
       }
@@ -105,6 +114,7 @@ void matrixChanger(double* mtx1, double* mtx2, int threadNum, int NumOfThreads, 
  */
 void fillMatrix(FILE* input, double* mtx){
   int i = 0;
+  int x = 0;
   int row = 0;
   int col = 0;
   char* line = NULL;
@@ -112,34 +122,33 @@ void fillMatrix(FILE* input, double* mtx){
   ssize_t linelen = getline(&line, &bufsize, input);
 
   for(col = 0; col < 1024; col++) {
-    fscanf(input, "%d", mtx[(row*1024)+0]);
-    //mtx[col] = line[i];
+    mtx[col] = ithCharToDouble(line, i, &x);
     i++;
   }
 
   linelen = getline(&line, &bufsize, input);
 
   for(row = 1; row < 1023; row++) {
-    fscanf(input, "%d", mtx[(row*1024)+0]);
-    for(col = 0; col < 1023; col++){
+    mtx[(row*1024)+0] = ithCharToDouble(line, 0, &x);
+    for(col = 1; col < 1023; col++){
       mtx[(row*1024)+col]= 0.0000000000;
     }
-    mtx[(row*1024)+1023] = line[1023];
+    mtx[(row*1024)+1023] = ithCharToDouble(line, 1023, &x);
     linelen = getline(&line, &bufsize, input);
   }
 
   i = 0;
   for(col = 0; col < 1024; col++) {
-    mtx[(1023*1024)+col] = line[i];
+    mtx[(1023*1024)+col] = ithCharToDouble(line, i, &x);
     i++;
   }
 }
 
-double gross(char* line, int i) {
+double ithCharToDouble(char* line, int i, int* x) {
   double retVal = 0;
   int decFound = 0;
-  int decPoint = 0;
-  int j = 0;
+  double decPoint = 1;
+  int j = *x;
 
   while(i) {
     if(isspace(line[j])) {
@@ -148,20 +157,19 @@ double gross(char* line, int i) {
     j++;
   }
 
-  j--;
-
   while(!isspace(line[j])) {
     if(line[j] == 46) {
       decFound = 1;
     } else if(!decFound) {
-      retVal = retVal + (line[j]- 48);
       retVal = retVal * 10;
-      j++;
+      retVal = retVal + (line[j]- 48);
     } else {
-      retVal = retVal + (line[j] * (10^decPoint));
-      decPoint--;
+      decPoint /= 10;
+      retVal += ((line[j]-48) * decPoint);
     }
+    j++;
   }
 
+  //retVal = fmod(retVal, 0.0000000001);
   return retVal;
 }
