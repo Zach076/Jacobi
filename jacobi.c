@@ -8,17 +8,31 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
-#define EPSILON .001
+#define EPSILON .00001
 
-/*
- */
-double ithCharToDouble(char* line, int i, int* x);
+/*ithCharToDouble
+ * converts the ith token in a line to a double
+ *  line: pointer to string containing tokens to convert
+ *  i: index of the token to convert
+ * returns the converted value as a double
+*/
+double ithCharToDouble(char* line, int i);
 
-/*
- */
+/*changeChecker
+ * updates current maxChange value using a mutex.
+ *  maxChange: pointer to current value of the largest change in the matrix.
+ *  CHALLENGER: new value to compare against maxChange.
+*/
 void changeChecker(double* maxChange, double CHALLENGER);
 
-/*
+/*matrixChanger
+ * implements the jacobi equation using two matrices.
+ *  mtx1: original matrix containing initial values
+ *  mtx2: copy of mtx1 to use in algorithm
+ *  threadnum: number specifying the current thread executing the function
+ *  NumOfThreads: total number of threads executing the function
+ *  maxChange: pointer to double specifying the maximum change of a value in the
+ *           matrix.
  */
 void matrixChanger(double* mtx1, double* mtx2, int threadNum, int NumOfThreads, double* maxChange);
 
@@ -30,8 +44,8 @@ void matrixChanger(double* mtx1, double* mtx2, int threadNum, int NumOfThreads, 
 void fillMatrix(FILE* input, double* mtx);
 
 /* TO DO:
- * debug jacobi
- * mutex
+ * print output to file depending on where the jcobi method ends (mtx1 and mtx2)
+ * clean up the damn warnings
  * find some way to time the program
  * add parallelization:
  *   mutex for maxChange
@@ -68,6 +82,12 @@ void changeChecker(double* maxChange, double CHALLENGER) {
 }
 
 /*
+ *
+ *
+ *
+ *
+ *
+ *
  */
 void matrixChanger(double* mtx1, double* mtx2, int threadNum, int NumOfThreads, double* maxChange) {
 
@@ -114,7 +134,6 @@ void matrixChanger(double* mtx1, double* mtx2, int threadNum, int NumOfThreads, 
  */
 void fillMatrix(FILE* input, double* mtx){
   int i = 0;
-  int x = 0;
   int row = 0;
   int col = 0;
   char* line = NULL;
@@ -122,33 +141,32 @@ void fillMatrix(FILE* input, double* mtx){
   ssize_t linelen = getline(&line, &bufsize, input);
 
   for(col = 0; col < 1024; col++) {
-    mtx[col] = ithCharToDouble(line, i, &x);
+    mtx[col] = ithCharToDouble(line, i);
     i++;
   }
 
   linelen = getline(&line, &bufsize, input);
 
   for(row = 1; row < 1023; row++) {
-    mtx[(row*1024)+0] = ithCharToDouble(line, 0, &x);
+    mtx[(row*1024)+0] = ithCharToDouble(line, 0);
     for(col = 1; col < 1023; col++){
       mtx[(row*1024)+col]= 0.0000000000;
     }
-    mtx[(row*1024)+1023] = ithCharToDouble(line, 1023, &x);
+    mtx[(row*1024)+1023] = ithCharToDouble(line, 1023);
     linelen = getline(&line, &bufsize, input);
   }
 
   i = 0;
   for(col = 0; col < 1024; col++) {
-    mtx[(1023*1024)+col] = ithCharToDouble(line, i, &x);
+    mtx[(1023*1024)+col] = ithCharToDouble(line, i);
     i++;
   }
 }
 
-double ithCharToDouble(char* line, int i, int* x) {
+double ithCharToDouble(char* line, int i) {
   double retVal = 0;
   int decFound = 0;
   double decPoint = 1;
-  int j = *x;
 
   while(i) {
     if(isspace(line[j])) {
