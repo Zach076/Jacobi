@@ -8,7 +8,21 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
+#include <pthread.h>
 #define EPSILON .00001
+
+struct thread_data_st{
+  double* mtx1;
+  double* mtx2;
+  int threadNum;
+  int NumOfThreads;
+  double* maxChange;
+  pthread_mutex_t* maxMutex;
+  pthread_mutex_t* syncMutex;
+  int* syncVal;
+};
+
+typedef struct thread_data_st thread_data;
 
 /*ithCharToDouble
  * converts the ith token in a line to a double
@@ -23,7 +37,7 @@ double ithCharToDouble(char* line, int i);
  *  maxChange: pointer to current value of the largest change in the matrix.
  *  CHALLENGER: new value to compare against maxChange.
 */
-void changeChecker(double* maxChange, double CHALLENGER);
+void changeChecker(double* maxChange, double CHALLENGER, pthread_mutex_t *maxMutex);
 
 /*matrixChanger
  * implements the jacobi equation using two matrices.
@@ -34,7 +48,7 @@ void changeChecker(double* maxChange, double CHALLENGER);
  *  maxChange: pointer to double specifying the maximum change of a value in the
  *           matrix.
  */
-void matrixChanger(double* mtx1, double* mtx2, int threadNum, int NumOfThreads, double* maxChange);
+void *matrixChanger(void* PARAMETER);
 
 /*fillMatrix
  * fills a 1024x1024 2d array with values from a file named "input"
@@ -61,24 +75,39 @@ int main(int argc, const char* argv[]) {
   //int NumOfThreads = *argv[0];
   int NumOfThreads = 1;
   int x;
+  pthread_mutex_t maxMutex;
+  pthread_mutex_t syncMutex;
+  pthread_t tid;
+  thread_data *PARAMETER;
+  int syncVal = 0;
 
   fillMatrix(input, mtx1);
   memcpy(mtx2, mtx1, 1024*1024*sizeof(double));
   for(int threadNum = 1;threadNum <= NumOfThreads; threadNum++) {
-    //new thread of matrixChanger
-    matrixChanger(mtx1, mtx2, threadNum, NumOfThreads, &maxChange);
+    PARAMETER = malloc(sizeof(thread_data));
+    PARAMETER->mtx1 = mtx1;
+    PARAMETER->mtx2 = mtx2;
+    PARAMETER->threadNum = threadNum;
+    PARAMETER->NumOfThreads = NumOfThreads;
+    PARAMETER->maxChange = &maxChange;
+    PARAMETER->maxMutex = &maxMutex;
+    PARAMETER->syncMutex = &syncMutex;
+    PARAMETER->syncVal = &syncVal;
+    pthread_create(&tid, NULL, matrixChanger, (void *)PARAMETER);
+    //matrixChanger(mtx1, mtx2, threadNum, NumOfThreads, &maxChange);
   }
   x = 1;
+  return x;
 }
 
 /*
  */
-void changeChecker(double* maxChange, double CHALLENGER) {
-  //lock here while in use
+void changeChecker(double* maxChange, double CHALLENGER, pthread_mutex_t *maxMutex) {
+  pthread_mutex_lock(maxMutex);
   if(CHALLENGER > *maxChange) {
     *maxChange = CHALLENGER;
   }
-  //unlock
+  pthread_mutex_unlock(maxMutex);
 }
 
 /*
@@ -89,9 +118,21 @@ void changeChecker(double* maxChange, double CHALLENGER) {
  *
  *
  */
-void matrixChanger(double* mtx1, double* mtx2, int threadNum, int NumOfThreads, double* maxChange) {
+void *matrixChanger(void* PARAMETER) {
+  thread_data* newParam = PARAMETER;
+  double* mtx1 = newParam->mtx1;
+  double* mtx2 = newParam->mtx2;
+  int threadNum = newParam->threadNum;
+  int NumOfThreads = newParam->NumOfThreads;
+  double* maxChange = newParam->maxChange;
+  pthread_mutex_t *maxMutex = newParam->maxMutex;
+  pthread_mutex_t *syncMutex = newParam->syncMutex;
+  int* syncVal = newParam->syncVal;
+
+  int x;
 
   while(*maxChange > EPSILON) {
+    x=0;
     *maxChange = 0;
     for(int row = threadNum; row < 1023; row+=NumOfThreads) {
       for(int col = 1; col < 1023; col++) {
@@ -99,26 +140,35 @@ void matrixChanger(double* mtx1, double* mtx2, int threadNum, int NumOfThreads, 
                          mtx1[(row*1024)+(col+1)] + mtx1[((row+1)*1024)+col];
         mtx2[(row*1024)+col] = mtx2[(row*1024)+(col)]/4;
         if((mtx2[(row*1024)+col]- mtx1[(row*1024)+col]) > *maxChange) {
-          changeChecker(maxChange, (mtx2[(row*1024)+col]- mtx1[(row*1024)+col]));
+          changeChecker(maxChange, (mtx2[(row*1024)+col]- mtx1[(row*1024)+col]), maxMutex);
         }
       }
     }
-    //lock until all threads are here
+
+    pthread_mutex_lock(syncMutex);
+      *syncVal++;
+    pthread_mutex_unlock(syncMutex);
+    while(*syncVal != NumOfThreads){}
 
     if(*maxChange > EPSILON) {
+      x=1;
       for(int row = threadNum; row < 1023; row+=NumOfThreads) {
         for(int col = 1; col < 1023; col++) {
           mtx1[(row*1024)+col] = mtx2[((row-1)*1024)+col] + mtx2[(row*1024)+(col-1)] +
                            mtx2[(row*1024)+col+1] + mtx2[((row+1)*1024)+col];
           mtx1[(row*1024)+col] = mtx1[(row*1024)+col]/4;
           if((mtx1[(row*1024)+col]- mtx2[(row*1024)+col]) > *maxChange) {
-            changeChecker(maxChange, (mtx1[(row*1024)+col]- mtx2[(row*1024)+col]));
+            changeChecker(maxChange, (mtx1[(row*1024)+col]- mtx2[(row*1024)+col]), maxMutex);
           }
         }
       }
+      pthread_mutex_lock(syncMutex);
+        *syncVal--;
+      pthread_mutex_unlock(syncMutex);
+      while(*syncVal != 0){}
     }
-    //lock until all threads are here
   }
+  return (void *)&x;
 }
 
 /*fillMatrix
@@ -167,6 +217,7 @@ double ithCharToDouble(char* line, int i) {
   double retVal = 0;
   int decFound = 0;
   double decPoint = 1;
+  int j = 0;
 
   while(i) {
     if(isspace(line[j])) {
