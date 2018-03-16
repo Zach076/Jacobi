@@ -1,0 +1,4 @@
+To recreate our results the files in Jacobi.tar should be extracted to the current directory.
+Then if report.sh has execute permissions all you need to do is execute it
+report.sh will compile jacobi.c, and time it with up to 10 number of threads.
+The output will be printed to the file results.txt
