@@ -25,6 +25,15 @@ struct thread_data_st{
 
 typedef struct thread_data_st thread_data;
 
+/*sync
+ * wont let threads pass until all have entered
+ * syncMutex: only lets one do work inside at a time so there is no conflict in syncVal iteration
+ * cond: pthread cond to keep everyone inside sync until all have arrived
+ * syncVal: current number of threads waiting
+ * NumOfThreads: number of threads needed to arrive before continuing
+ */
+void sync(pthread_mutex_t* syncMutex, pthread_cond_t* cond, int* syncVal, int NumOfThreads);
+
 /*ithCharToDouble
  * converts the ith token in a line to a double
  *  line: pointer to string containing tokens to convert
@@ -72,14 +81,15 @@ int main(int argc, const char* argv[]) {
   double *mtx1 = (double *) malloc(1024*1024*sizeof(double));
   double *mtx2 = (double *) malloc(1024*1024*sizeof(double));
   double maxChange = 1;
-  //int threadNum = 1;
-  int NumOfThreads = *argv[1];
-  int x;
+  //int NumOfThreads = *argv[1];
+  int NumOfThreads = (*argv[1] - 48);
+  pthread_t tid;
+
   pthread_mutex_t maxMutex;
   pthread_mutex_t syncMutex;
   pthread_mutex_init(&maxMutex, NULL);
   pthread_mutex_init(&syncMutex, NULL);
-  pthread_t tid;
+
   pthread_cond_t cond;
   pthread_cond_init(&cond, NULL);
   thread_data *PARAMETER;
@@ -98,15 +108,17 @@ int main(int argc, const char* argv[]) {
     PARAMETER->syncMutex = &syncMutex;
     PARAMETER->syncVal = &syncVal;
     PARAMETER->cond = &cond;
-    fprintf(stderr, "pthread returns %i \n", pthread_create(&tid, NULL, matrixChanger, (void *)PARAMETER));
-    //matrixChanger(mtx1, mtx2, threadNum, NumOfThreads, &maxChange);
+    if(pthread_create(&tid, NULL, matrixChanger, (void *)PARAMETER)) {
+      return 1;
+    }
+    //fprintf(stderr, "pthread returns %i \n", pthread_create(&tid, NULL, matrixChanger, (void *)PARAMETER));
   }
   (void) pthread_join(tid, NULL);
-  x = 1;
-  return x;
 }
 
-/*
+/*changeChecker
+ * lets one thread at a time come in to check if their new possible maxChange value
+ *   will overtake the previous maxChange value
  */
 void changeChecker(double* maxChange, double CHALLENGER, pthread_mutex_t *maxMutex) {
   pthread_mutex_lock(maxMutex);
@@ -116,13 +128,14 @@ void changeChecker(double* maxChange, double CHALLENGER, pthread_mutex_t *maxMut
   pthread_mutex_unlock(maxMutex);
 }
 
-/*
- *
- *
- *
- *
- *
- *
+/*matrixChanger
+ * implements the jacobi equation using two matrices.
+ *  mtx1: original matrix containing initial values
+ *  mtx2: copy of mtx1 to use in algorithm
+ *  threadnum: number specifying the current thread executing the function
+ *  NumOfThreads: total number of threads executing the function
+ *  maxChange: pointer to double specifying the maximum change of a value in the
+ *           matrix.
  */
 void *matrixChanger(void* PARAMETER) {
   thread_data* newParam = PARAMETER;
@@ -136,37 +149,13 @@ void *matrixChanger(void* PARAMETER) {
   int* syncVal = newParam->syncVal;
   pthread_cond_t* cond = newParam->cond;
 
-  int x;
-
   while(*maxChange > EPSILON) {
-    x=0;
 
-    //sync break
-    pthread_mutex_lock(syncMutex);
-      *syncVal = *syncVal + 1;
-      if(*syncVal == NumOfThreads) {
-        pthread_cond_broadcast(cond);
-      } else {
-        pthread_cond_wait(cond, syncMutex);
-      }
-    pthread_mutex_unlock(syncMutex);
-
-    //check and zero
-    pthread_mutex_lock(maxMutex);
+    sync(syncMutex, cond, syncVal, NumOfThreads);
+    //zero out MaxChange for new iteration of Jacobi
     *maxChange = 0;
-    pthread_mutex_unlock(maxMutex);
+    sync(syncMutex, cond, syncVal, NumOfThreads);
 
-    //sync break
-    pthread_mutex_lock(syncMutex);
-      *syncVal = *syncVal - 1;
-      if(*syncVal == 0) {
-        pthread_cond_broadcast(cond);
-      } else {
-        pthread_cond_wait(cond, syncMutex);
-      }
-    pthread_mutex_unlock(syncMutex);
-
-    //find
     for(int row = threadNum; row < 1023; row+=NumOfThreads) {
       for(int col = 1; col < 1023; col++) {
         mtx2[(row*1024)+col] = mtx1[((row-1)*1024)+col] + mtx1[(row*1024)+(col-1)] +
@@ -177,47 +166,18 @@ void *matrixChanger(void* PARAMETER) {
         }
       }
     }
+    sync(syncMutex, cond, syncVal, NumOfThreads);
 
-    //sync break
-    pthread_mutex_lock(syncMutex);
-      *syncVal = *syncVal + 1;
-      if(*syncVal == NumOfThreads) {
-        pthread_cond_broadcast(cond);
-      } else {
-        pthread_cond_wait(cond, syncMutex);
-      }
-    pthread_mutex_unlock(syncMutex);
 
-    //check and zero
+
+    //if not done, continue
     if(*maxChange > EPSILON) {
 
-      //sync break
-      pthread_mutex_lock(syncMutex);
-        *syncVal = *syncVal - 1;
-        if(*syncVal == 0) {
-          pthread_cond_broadcast(cond);
-        } else {
-          pthread_cond_wait(cond, syncMutex);
-        }
-      pthread_mutex_unlock(syncMutex);
-
-
-      x=1;
-      pthread_mutex_lock(maxMutex);
+      sync(syncMutex, cond, syncVal, NumOfThreads);
+      //zero out MaxChange for new iteration of Jacobi
       *maxChange = 0;
-      pthread_mutex_unlock(maxMutex);
+      sync(syncMutex, cond, syncVal, NumOfThreads);
 
-      //sync break
-      pthread_mutex_lock(syncMutex);
-        *syncVal = *syncVal + 1;
-        if(*syncVal == NumOfThreads) {
-          pthread_cond_broadcast(cond);
-        } else {
-          pthread_cond_wait(cond, syncMutex);
-        }
-      pthread_mutex_unlock(syncMutex);
-
-      //find
       for(int row = threadNum; row < 1023; row+=NumOfThreads) {
         for(int col = 1; col < 1023; col++) {
           mtx1[(row*1024)+col] = mtx2[((row-1)*1024)+col] + mtx2[(row*1024)+(col-1)] +
@@ -228,20 +188,29 @@ void *matrixChanger(void* PARAMETER) {
           }
         }
       }
+      sync(syncMutex, cond, syncVal, NumOfThreads);
 
-      //sync break
-      pthread_mutex_lock(syncMutex);
-        *syncVal = *syncVal - 1;
-        if(*syncVal == 0) {
-          pthread_cond_broadcast(cond);
-        } else {
-          pthread_cond_wait(cond, syncMutex);
-        }
-      pthread_mutex_unlock(syncMutex);
+
 
     }
   }
-  return (void *)&x;
+  return (void *)maxChange;
+}
+
+/*sync
+ * function used many times in matrixChanger to sync threads
+ *   and make sure none go beyond where they should while iterating jacobi
+ */
+void sync(pthread_mutex_t* syncMutex, pthread_cond_t* cond, int* syncVal, int NumOfThreads) {
+  pthread_mutex_lock(syncMutex);
+    *syncVal = *syncVal + 1;
+    if(*syncVal == NumOfThreads) {
+      pthread_cond_broadcast(cond);
+      *syncVal = 0;
+    } else {
+      pthread_cond_wait(cond, syncMutex);
+    }
+  pthread_mutex_unlock(syncMutex);
 }
 
 /*fillMatrix
@@ -286,6 +255,10 @@ void fillMatrix(FILE* input, double* mtx){
   }
 }
 
+/*ithCharToDouble
+ * probably an easier and more elegant way to do this but we knew this would work
+ * takes a line of doubles read in as a char* and converts the i'th entry to a double
+ */
 double ithCharToDouble(char* line, int i) {
   double retVal = 0;
   int decFound = 0;
@@ -311,7 +284,5 @@ double ithCharToDouble(char* line, int i) {
     }
     j++;
   }
-
-  //retVal = fmod(retVal, 0.0000000001);
   return retVal;
 }
