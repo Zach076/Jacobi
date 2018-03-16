@@ -81,7 +81,14 @@ int main(int argc, const char* argv[]) {
   double *mtx1 = (double *) malloc(1024*1024*sizeof(double));
   double *mtx2 = (double *) malloc(1024*1024*sizeof(double));
   double maxChange = 1;
-  int NumOfThreads = (*argv[1] - 48);
+  
+  int NumOfThreads = 0;
+  int i = 0;
+  while(argv[1][i] >= 48){
+    NumOfThreads *= 10;
+    NumOfThreads += (argv[1][i] - 48);
+    i++;
+  }
   pthread_t tid;
 
   pthread_mutex_t maxMutex;
