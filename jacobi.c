@@ -9,7 +9,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <pthread.h>
-#define EPSILON .001
+#define EPSILON .00001
 
 struct thread_data_st{
   double* mtx1;
@@ -20,6 +20,7 @@ struct thread_data_st{
   pthread_mutex_t* maxMutex;
   pthread_mutex_t* syncMutex;
   int* syncVal;
+  pthread_cond_t* cond;
 };
 
 typedef struct thread_data_st thread_data;
@@ -73,17 +74,20 @@ int main(int argc, const char* argv[]) {
   double maxChange = 1;
   //int threadNum = 1;
   //int NumOfThreads = *argv[0];
-  int NumOfThreads = 1;
+  int NumOfThreads = 50;
   int x;
   pthread_mutex_t maxMutex;
   pthread_mutex_t syncMutex;
+  pthread_mutex_init(&maxMutex, NULL);
+  pthread_mutex_init(&syncMutex, NULL);
   pthread_t tid;
+  pthread_cond_t cond;
+  pthread_cond_init(&cond, NULL);
   thread_data *PARAMETER;
   int syncVal = 0;
 
   fillMatrix(input, mtx1);
   memcpy(mtx2, mtx1, 1024*1024*sizeof(double));
-  fprintf(stderr, "before for loop \n");
   for(int threadNum = 1;threadNum <= NumOfThreads; threadNum++) {
     PARAMETER = malloc(sizeof(thread_data));
     PARAMETER->mtx1 = mtx1;
@@ -94,7 +98,7 @@ int main(int argc, const char* argv[]) {
     PARAMETER->maxMutex = &maxMutex;
     PARAMETER->syncMutex = &syncMutex;
     PARAMETER->syncVal = &syncVal;
-    fprintf(stderr, "in for loop \n");
+    PARAMETER->cond = &cond;
     fprintf(stderr, "pthread returns %i \n", pthread_create(&tid, NULL, matrixChanger, (void *)PARAMETER));
     //matrixChanger(mtx1, mtx2, threadNum, NumOfThreads, &maxChange);
   }
@@ -131,12 +135,39 @@ void *matrixChanger(void* PARAMETER) {
   pthread_mutex_t *maxMutex = newParam->maxMutex;
   pthread_mutex_t *syncMutex = newParam->syncMutex;
   int* syncVal = newParam->syncVal;
+  pthread_cond_t* cond = newParam->cond;
 
   int x;
 
   while(*maxChange > EPSILON) {
     x=0;
+
+    //sync break
+    pthread_mutex_lock(syncMutex);
+      *syncVal = *syncVal + 1;
+      if(*syncVal == NumOfThreads) {
+        pthread_cond_broadcast(cond);
+      } else {
+        pthread_cond_wait(cond, syncMutex);
+      }
+    pthread_mutex_unlock(syncMutex);
+
+    //check and zero
+    pthread_mutex_lock(maxMutex);
     *maxChange = 0;
+    pthread_mutex_unlock(maxMutex);
+
+    //sync break
+    pthread_mutex_lock(syncMutex);
+      *syncVal = *syncVal - 1;
+      if(*syncVal == 0) {
+        pthread_cond_broadcast(cond);
+      } else {
+        pthread_cond_wait(cond, syncMutex);
+      }
+    pthread_mutex_unlock(syncMutex);
+
+    //find
     for(int row = threadNum; row < 1023; row+=NumOfThreads) {
       for(int col = 1; col < 1023; col++) {
         mtx2[(row*1024)+col] = mtx1[((row-1)*1024)+col] + mtx1[(row*1024)+(col-1)] +
@@ -147,15 +178,51 @@ void *matrixChanger(void* PARAMETER) {
         }
       }
     }
-    fprintf(stderr, "maxChange = %f \n", *maxChange);
-    fprintf(stderr, "in matrixchanger\n");
-    pthread_mutex_lock(syncMutex);
-      *syncVal++;
-    pthread_mutex_unlock(syncMutex);
-    while(*syncVal != (NumOfThreads+1)){}
 
+    //sync break
+    pthread_mutex_lock(syncMutex);
+      *syncVal = *syncVal + 1;
+      if(*syncVal == NumOfThreads) {
+        pthread_cond_broadcast(cond);
+      } else {
+        pthread_cond_wait(cond, syncMutex);
+      }
+    pthread_mutex_unlock(syncMutex);
+
+    pthread_mutex_lock(maxMutex);
+    fprintf(stderr, "maxChange = %f \nthreadNum = %i \n mtx2 \n \n", *maxChange , threadNum);
+    pthread_mutex_unlock(maxMutex);
+
+    //check and zero
     if(*maxChange > EPSILON) {
+
+      //sync break
+      pthread_mutex_lock(syncMutex);
+        *syncVal = *syncVal - 1;
+        if(*syncVal == 0) {
+          pthread_cond_broadcast(cond);
+        } else {
+          pthread_cond_wait(cond, syncMutex);
+        }
+      pthread_mutex_unlock(syncMutex);
+
+
       x=1;
+      pthread_mutex_lock(maxMutex);
+      *maxChange = 0;
+      pthread_mutex_unlock(maxMutex);
+
+      //sync break
+      pthread_mutex_lock(syncMutex);
+        *syncVal = *syncVal + 1;
+        if(*syncVal == NumOfThreads) {
+          pthread_cond_broadcast(cond);
+        } else {
+          pthread_cond_wait(cond, syncMutex);
+        }
+      pthread_mutex_unlock(syncMutex);
+
+      //find
       for(int row = threadNum; row < 1023; row+=NumOfThreads) {
         for(int col = 1; col < 1023; col++) {
           mtx1[(row*1024)+col] = mtx2[((row-1)*1024)+col] + mtx2[(row*1024)+(col-1)] +
@@ -166,11 +233,20 @@ void *matrixChanger(void* PARAMETER) {
           }
         }
       }
-      fprintf(stderr, "maxChange = %f \n", *maxChange);
+
+      //sync break
       pthread_mutex_lock(syncMutex);
-        *syncVal--;
+        *syncVal = *syncVal - 1;
+        if(*syncVal == 0) {
+          pthread_cond_broadcast(cond);
+        } else {
+          pthread_cond_wait(cond, syncMutex);
+        }
       pthread_mutex_unlock(syncMutex);
-      while(*syncVal != 0){}
+
+      pthread_mutex_lock(maxMutex);
+      fprintf(stderr, "maxChange = %f \nthreadNum = %i \n mtx1 \n \n", *maxChange , threadNum);
+      pthread_mutex_unlock(maxMutex);
     }
   }
   return (void *)&x;
