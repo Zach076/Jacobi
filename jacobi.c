@@ -9,7 +9,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <pthread.h>
-#define EPSILON .00001
+#define EPSILON .001
 
 struct thread_data_st{
   double* mtx1;
@@ -83,6 +83,7 @@ int main(int argc, const char* argv[]) {
 
   fillMatrix(input, mtx1);
   memcpy(mtx2, mtx1, 1024*1024*sizeof(double));
+  fprintf(stderr, "before for loop \n");
   for(int threadNum = 1;threadNum <= NumOfThreads; threadNum++) {
     PARAMETER = malloc(sizeof(thread_data));
     PARAMETER->mtx1 = mtx1;
@@ -93,9 +94,11 @@ int main(int argc, const char* argv[]) {
     PARAMETER->maxMutex = &maxMutex;
     PARAMETER->syncMutex = &syncMutex;
     PARAMETER->syncVal = &syncVal;
-    pthread_create(&tid, NULL, matrixChanger, (void *)PARAMETER);
+    fprintf(stderr, "in for loop \n");
+    fprintf(stderr, "pthread returns %i \n", pthread_create(&tid, NULL, matrixChanger, (void *)PARAMETER));
     //matrixChanger(mtx1, mtx2, threadNum, NumOfThreads, &maxChange);
   }
+  (void) pthread_join(tid, NULL);
   x = 1;
   return x;
 }
@@ -144,11 +147,12 @@ void *matrixChanger(void* PARAMETER) {
         }
       }
     }
-
+    fprintf(stderr, "maxChange = %f \n", *maxChange);
+    fprintf(stderr, "in matrixchanger\n");
     pthread_mutex_lock(syncMutex);
       *syncVal++;
     pthread_mutex_unlock(syncMutex);
-    while(*syncVal != NumOfThreads){}
+    while(*syncVal != (NumOfThreads+1)){}
 
     if(*maxChange > EPSILON) {
       x=1;
@@ -162,6 +166,7 @@ void *matrixChanger(void* PARAMETER) {
           }
         }
       }
+      fprintf(stderr, "maxChange = %f \n", *maxChange);
       pthread_mutex_lock(syncMutex);
         *syncVal--;
       pthread_mutex_unlock(syncMutex);
