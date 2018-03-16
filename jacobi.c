@@ -27,12 +27,14 @@ typedef struct thread_data_st thread_data;
 
 /*sync
  * wont let threads pass until all have entered
- * syncMutex: only lets one do work inside at a time so there is no conflict in syncVal iteration
- * cond: pthread cond to keep everyone inside sync until all have arrived
- * syncVal: current number of threads waiting
- * NumOfThreads: number of threads needed to arrive before continuing
+ *  syncMutex: only lets one do work inside at a time so there is no conflict in
+      syncVal iteration
+ *  cond: pthread cond to keep everyone inside sync until all have arrived
+ *  syncVal: current number of threads waiting
+ *  NumOfThreads: number of threads needed to arrive before continuing
  */
-void sync(pthread_mutex_t* syncMutex, pthread_cond_t* cond, int* syncVal, int NumOfThreads);
+void sync(pthread_mutex_t* syncMutex, pthread_cond_t* cond, int* syncVal,
+          int NumOfThreads);
 
 /*ithCharToDouble
  * converts the ith token in a line to a double
@@ -47,7 +49,8 @@ double ithCharToDouble(char* line, int i);
  *  maxChange: pointer to current value of the largest change in the matrix.
  *  CHALLENGER: new value to compare against maxChange.
 */
-void changeChecker(double* maxChange, double CHALLENGER, pthread_mutex_t *maxMutex);
+void changeChecker(double* maxChange, double CHALLENGER,
+                    pthread_mutex_t *maxMutex);
 
 /*matrixChanger
  * implements the jacobi equation using two matrices.
@@ -81,8 +84,8 @@ int main(int argc, const char* argv[]) {
   double *mtx1 = (double *) malloc(1024*1024*sizeof(double));
   double *mtx2 = (double *) malloc(1024*1024*sizeof(double));
   double maxChange = 1;
-  
   int NumOfThreads = 0;
+
   int i = 0;
   while(argv[1][i] >= 48){
     NumOfThreads *= 10;
@@ -122,10 +125,11 @@ int main(int argc, const char* argv[]) {
 }
 
 /*changeChecker
- * lets one thread at a time come in to check if their new possible maxChange value
- *   will overtake the previous maxChange value
+ * lets one thread at a time come in to check if their new possible maxChange
+ *   value will overtake the previous maxChange value
  */
-void changeChecker(double* maxChange, double CHALLENGER, pthread_mutex_t *maxMutex) {
+void changeChecker(double* maxChange, double CHALLENGER,
+                    pthread_mutex_t *maxMutex) {
   pthread_mutex_lock(maxMutex);
   if(CHALLENGER > *maxChange) {
     *maxChange = CHALLENGER;
@@ -157,45 +161,45 @@ void *matrixChanger(void* PARAMETER) {
   while(*maxChange > EPSILON) {
 
     sync(syncMutex, cond, syncVal, NumOfThreads);
-    //zero out MaxChange for new iteration of Jacobi
     *maxChange = 0;
     sync(syncMutex, cond, syncVal, NumOfThreads);
 
     for(int row = threadNum; row < 1023; row+=NumOfThreads) {
       for(int col = 1; col < 1023; col++) {
-        mtx2[(row*1024)+col] = mtx1[((row-1)*1024)+col] + mtx1[(row*1024)+(col-1)] +
-                         mtx1[(row*1024)+(col+1)] + mtx1[((row+1)*1024)+col];
+        mtx2[(row*1024)+col] = mtx1[((row-1)*1024)+col] +
+                  mtx1[(row*1024)+(col-1)] + mtx1[(row*1024)+(col+1)] +
+                  mtx1[((row+1)*1024)+col];
         mtx2[(row*1024)+col] = mtx2[(row*1024)+(col)]/4;
         if((mtx2[(row*1024)+col]- mtx1[(row*1024)+col]) > *maxChange) {
-          changeChecker(maxChange, (mtx2[(row*1024)+col]- mtx1[(row*1024)+col]), maxMutex);
+          changeChecker(maxChange, (mtx2[(row*1024)+col]- mtx1[(row*1024)+col]),
+               maxMutex);
         }
       }
     }
+
     sync(syncMutex, cond, syncVal, NumOfThreads);
 
 
 
-    //if not done, continue
     if(*maxChange > EPSILON) {
 
       sync(syncMutex, cond, syncVal, NumOfThreads);
-      //zero out MaxChange for new iteration of Jacobi
       *maxChange = 0;
       sync(syncMutex, cond, syncVal, NumOfThreads);
 
       for(int row = threadNum; row < 1023; row+=NumOfThreads) {
         for(int col = 1; col < 1023; col++) {
-          mtx1[(row*1024)+col] = mtx2[((row-1)*1024)+col] + mtx2[(row*1024)+(col-1)] +
-                           mtx2[(row*1024)+col+1] + mtx2[((row+1)*1024)+col];
+          mtx1[(row*1024)+col] = mtx2[((row-1)*1024)+col] + mtx2[(row*1024)+
+                (col-1)] + mtx2[(row*1024)+col+1] + mtx2[((row+1)*1024)+col];
           mtx1[(row*1024)+col] = mtx1[(row*1024)+col]/4;
           if((mtx1[(row*1024)+col]- mtx2[(row*1024)+col]) > *maxChange) {
-            changeChecker(maxChange, (mtx1[(row*1024)+col]- mtx2[(row*1024)+col]), maxMutex);
+            changeChecker(maxChange, (mtx1[(row*1024)+col]-
+                          mtx2[(row*1024)+col]), maxMutex);
           }
         }
       }
+
       sync(syncMutex, cond, syncVal, NumOfThreads);
-
-
 
     }
   }
@@ -206,7 +210,8 @@ void *matrixChanger(void* PARAMETER) {
  * function used many times in matrixChanger to sync threads
  *   and make sure none go beyond where they should while iterating jacobi
  */
-void sync(pthread_mutex_t* syncMutex, pthread_cond_t* cond, int* syncVal, int NumOfThreads) {
+void sync(pthread_mutex_t* syncMutex, pthread_cond_t* cond, int* syncVal,
+          int NumOfThreads) {
   pthread_mutex_lock(syncMutex);
     *syncVal = *syncVal + 1;
     if(*syncVal == NumOfThreads) {
@@ -235,14 +240,14 @@ void fillMatrix(FILE* input, double* mtx){
   int col = 0;
   char* line = NULL;
   size_t  bufsize = 0;
-  ssize_t linelen = getline(&line, &bufsize, input);
+  (void) getline(&line, &bufsize, input);
 
   for(col = 0; col < 1024; col++) {
     mtx[col] = ithCharToDouble(line, i);
     i++;
   }
 
-  linelen = getline(&line, &bufsize, input);
+  (void) getline(&line, &bufsize, input);
 
   for(row = 1; row < 1023; row++) {
     mtx[(row*1024)+0] = ithCharToDouble(line, 0);
@@ -250,7 +255,7 @@ void fillMatrix(FILE* input, double* mtx){
       mtx[(row*1024)+col]= 0.0000000000;
     }
     mtx[(row*1024)+1023] = ithCharToDouble(line, 1023);
-    linelen = getline(&line, &bufsize, input);
+    (void) getline(&line, &bufsize, input);
   }
 
   i = 0;
@@ -261,8 +266,9 @@ void fillMatrix(FILE* input, double* mtx){
 }
 
 /*ithCharToDouble
- * probably an easier and more elegant way to do this but we knew this would work
- * takes a line of doubles read in as a char* and converts the i'th entry to a double
+ * probably an easier and more elegant way to do this but we knew this would
+ * work takes a line of doubles read in as a char* and converts the i'th
+ * entry to a double
  */
 double ithCharToDouble(char* line, int i) {
   double retVal = 0;
