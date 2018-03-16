@@ -81,7 +81,6 @@ int main(int argc, const char* argv[]) {
   double *mtx1 = (double *) malloc(1024*1024*sizeof(double));
   double *mtx2 = (double *) malloc(1024*1024*sizeof(double));
   double maxChange = 1;
-  //int NumOfThreads = *argv[1];
   int NumOfThreads = (*argv[1] - 48);
   pthread_t tid;
 
@@ -111,7 +110,6 @@ int main(int argc, const char* argv[]) {
     if(pthread_create(&tid, NULL, matrixChanger, (void *)PARAMETER)) {
       return 1;
     }
-    //fprintf(stderr, "pthread returns %i \n", pthread_create(&tid, NULL, matrixChanger, (void *)PARAMETER));
   }
   (void) pthread_join(tid, NULL);
 }
