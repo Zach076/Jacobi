@@ -73,8 +73,7 @@ int main(int argc, const char* argv[]) {
   double *mtx2 = (double *) malloc(1024*1024*sizeof(double));
   double maxChange = 1;
   //int threadNum = 1;
-  //int NumOfThreads = *argv[0];
-  int NumOfThreads = 50;
+  int NumOfThreads = *argv[1];
   int x;
   pthread_mutex_t maxMutex;
   pthread_mutex_t syncMutex;
@@ -189,10 +188,6 @@ void *matrixChanger(void* PARAMETER) {
       }
     pthread_mutex_unlock(syncMutex);
 
-    pthread_mutex_lock(maxMutex);
-    fprintf(stderr, "maxChange = %f \nthreadNum = %i \n mtx2 \n \n", *maxChange , threadNum);
-    pthread_mutex_unlock(maxMutex);
-
     //check and zero
     if(*maxChange > EPSILON) {
 
@@ -244,9 +239,6 @@ void *matrixChanger(void* PARAMETER) {
         }
       pthread_mutex_unlock(syncMutex);
 
-      pthread_mutex_lock(maxMutex);
-      fprintf(stderr, "maxChange = %f \nthreadNum = %i \n mtx1 \n \n", *maxChange , threadNum);
-      pthread_mutex_unlock(maxMutex);
     }
   }
   return (void *)&x;
